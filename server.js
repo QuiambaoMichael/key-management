@@ -1,44 +1,45 @@
-const express = require('express');
-const mongoose = require('mongoose');
+const SerialPort = require('serialport').SerialPort;
+const ReadlineParser = require('@serialport/parser-readline').ReadlineParser;
+const axios = require('axios');
 
-const app = express();
-app.use(express.json());
+// --- CONFIGURATION ---
+const SERIAL_PORT = 'COM3'; // Change to your actual port
+const BAUD_RATE = 9600;
+const API_URL = 'https://key-management-mz1o.onrender.com/api/logEvent'; // Replace with your real API
 
-const mongoUri = process.env.MONGODB_URI;
-if (!mongoUri) {
-  console.error("MONGODB_URI environment variable not set");
-  process.exit(1);
-}
-
-mongoose.connect(mongoUri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log("Connected to MongoDB"))
-  .catch((err) => {
-    console.error("Failed to connect to MongoDB:", err);
-    process.exit(1);
-  });
-
-const eventSchema = new mongoose.Schema({
-  uid: String,
-  keys: Number,
-  event: String,
-  time: String
+// Create serial port
+const port = new SerialPort({
+  path: SERIAL_PORT,
+  baudRate: BAUD_RATE,
 });
 
-const Event = mongoose.model('Event', eventSchema);
+// Create a parser to split by new lines
+const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
-app.post('/api/logEvent', async (req, res) => {
-  try {
-    const newEvent = new Event(req.body);
-    await newEvent.save();
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+port.on('open', () => {
+  console.log(`📡 Listening to Arduino on ${SERIAL_PORT}...`);
+});
+
+parser.on('data', async (line) => {
+  const trimmed = line.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const data = JSON.parse(trimmed);
+      console.log('📨 Received:', data);
+
+      // Post to Render API
+      try {
+        const response = await axios.post(API_URL, data);
+        console.log('✅ API response:', response.data);
+      } catch (apiErr) {
+        console.error('❌ API error:', apiErr.response?.data || apiErr.message);
+      }
+    } catch (err) {
+      console.warn('⚠️ Invalid JSON:', trimmed);
+    }
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+port.on('error', (err) => {
+  console.error('❌ Serial port error:', err.message);
 });
