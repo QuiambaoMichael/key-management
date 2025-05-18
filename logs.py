@@ -4,7 +4,7 @@ import requests
 
 SERIAL_PORT = 'COM3'  # Change to your Arduino's COM port, e.g. '/dev/ttyACM0' on Linux
 BAUD_RATE = 9600
-API_URL = 'http://localhost:3000/api/logEvent'  # Change to your Node.js backend URL
+API_URL = 'https://key-management-mz1o.onrender.com/api/logEvent'  # Change to your Node.js backend URL
 
 def main():
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
